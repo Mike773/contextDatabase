@@ -4,8 +4,11 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+CREATE SCHEMA IF NOT EXISTS rag_v2;
+SET search_path TO rag_v2, public;
+
 -- 1. Направления (верхний уровень изоляции)
-CREATE TABLE IF NOT EXISTS directions (
+CREATE TABLE IF NOT EXISTS rag_v2.directions (
     id                    BIGSERIAL PRIMARY KEY,
     short_name            TEXT NOT NULL,
     full_name             TEXT NOT NULL,
@@ -15,9 +18,9 @@ CREATE TABLE IF NOT EXISTS directions (
 );
 
 -- 2. Сырые документы, привязанные к направлению
-CREATE TABLE IF NOT EXISTS documents (
+CREATE TABLE IF NOT EXISTS rag_v2.documents (
     id                 BIGSERIAL PRIMARY KEY,
-    direction_id       BIGINT NOT NULL REFERENCES directions(id) ON DELETE CASCADE,
+    direction_id       BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
     title              TEXT NOT NULL,
     text               TEXT NOT NULL,
     should_chunk       BOOLEAN NOT NULL DEFAULT TRUE,
@@ -29,18 +32,18 @@ CREATE TABLE IF NOT EXISTS documents (
 );
 
 -- 3. Чанки документов
-CREATE TABLE IF NOT EXISTS chunks (
+CREATE TABLE IF NOT EXISTS rag_v2.chunks (
     id              BIGSERIAL PRIMARY KEY,
-    document_id     BIGINT NOT NULL REFERENCES documents(id)  ON DELETE CASCADE,
-    direction_id    BIGINT NOT NULL REFERENCES directions(id) ON DELETE CASCADE,
+    document_id     BIGINT NOT NULL REFERENCES rag_v2.documents(id)  ON DELETE CASCADE,
+    direction_id    BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
     text            TEXT NOT NULL,
     text_embedding  VECTOR(2560)
 );
 
 -- 4. Термины / наименования / процессы, выделенные из документов
-CREATE TABLE IF NOT EXISTS terms (
+CREATE TABLE IF NOT EXISTS rag_v2.terms (
     id                          BIGSERIAL PRIMARY KEY,
-    direction_id                BIGINT NOT NULL REFERENCES directions(id) ON DELETE CASCADE,
+    direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
     name                        TEXT NOT NULL,
     short_description           TEXT,
     detailed_description        TEXT,
@@ -49,9 +52,9 @@ CREATE TABLE IF NOT EXISTS terms (
 );
 
 -- 5. Роли (detailed_description включает связи между ролями)
-CREATE TABLE IF NOT EXISTS roles (
+CREATE TABLE IF NOT EXISTS rag_v2.roles (
     id                          BIGSERIAL PRIMARY KEY,
-    direction_id                BIGINT NOT NULL REFERENCES directions(id) ON DELETE CASCADE,
+    direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
     name                        TEXT NOT NULL,
     short_description           TEXT,
     detailed_description        TEXT,
@@ -60,9 +63,9 @@ CREATE TABLE IF NOT EXISTS roles (
 );
 
 -- 6. Утверждения из документов
-CREATE TABLE IF NOT EXISTS claims (
+CREATE TABLE IF NOT EXISTS rag_v2.claims (
     id                          BIGSERIAL PRIMARY KEY,
-    direction_id                BIGINT NOT NULL REFERENCES directions(id) ON DELETE CASCADE,
+    direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
     short_description           TEXT NOT NULL,
     detailed_description        TEXT NOT NULL,
     document_ids                BIGINT[] NOT NULL DEFAULT '{}',
@@ -70,9 +73,9 @@ CREATE TABLE IF NOT EXISTS claims (
 );
 
 -- 7. Противоречия между документами
-CREATE TABLE IF NOT EXISTS contradictions (
+CREATE TABLE IF NOT EXISTS rag_v2.contradictions (
     id                          BIGSERIAL PRIMARY KEY,
-    direction_id                BIGINT NOT NULL REFERENCES directions(id) ON DELETE CASCADE,
+    direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
     short_description           TEXT NOT NULL,
     detailed_description        TEXT NOT NULL,
     quotes                      JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -81,9 +84,9 @@ CREATE TABLE IF NOT EXISTS contradictions (
 );
 
 -- 8. Метрики / KPI / драйверы / показатели
-CREATE TABLE IF NOT EXISTS metrics (
+CREATE TABLE IF NOT EXISTS rag_v2.metrics (
     id                          BIGSERIAL PRIMARY KEY,
-    direction_id                BIGINT NOT NULL REFERENCES directions(id) ON DELETE CASCADE,
+    direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
     name                        TEXT NOT NULL,
     short_description           TEXT,
     detailed_description        TEXT,
@@ -95,9 +98,9 @@ CREATE TABLE IF NOT EXISTS metrics (
 );
 
 -- 9. Алгоритмы
-CREATE TABLE IF NOT EXISTS algorithms (
+CREATE TABLE IF NOT EXISTS rag_v2.algorithms (
     id                          BIGSERIAL PRIMARY KEY,
-    direction_id                BIGINT NOT NULL REFERENCES directions(id) ON DELETE CASCADE,
+    direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
     name                        TEXT NOT NULL,
     short_description           TEXT,
     detailed_description        TEXT NOT NULL,
