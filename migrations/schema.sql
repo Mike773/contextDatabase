@@ -43,10 +43,12 @@ CREATE TABLE IF NOT EXISTS rag_v2.chunks (
     text_embedding  VECTOR(2560)
 );
 
--- 4. Термины / наименования / процессы, выделенные из документов
+-- 4. Термины / наименования / процессы, выделенные из документов.
+-- scope: 'organization' — про организацию в целом; 'direction' — про конкретное направление.
 CREATE TABLE IF NOT EXISTS rag_v2.terms (
     id                          BIGSERIAL PRIMARY KEY,
     direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
+    scope                       TEXT NOT NULL DEFAULT 'direction',
     name                        TEXT NOT NULL,
     short_description           TEXT,
     detailed_description        TEXT,
@@ -67,10 +69,12 @@ CREATE TABLE IF NOT EXISTS rag_v2.roles (
     short_description_embedding VECTOR(2560)
 );
 
--- 6. Утверждения из документов
+-- 6. Утверждения из документов.
+-- scope: 'organization' — про организацию в целом; 'direction' — про конкретное направление.
 CREATE TABLE IF NOT EXISTS rag_v2.claims (
     id                          BIGSERIAL PRIMARY KEY,
     direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
+    scope                       TEXT NOT NULL DEFAULT 'direction',
     short_description           TEXT NOT NULL,
     detailed_description        TEXT NOT NULL,
     document_ids                BIGINT[] NOT NULL DEFAULT '{}',
