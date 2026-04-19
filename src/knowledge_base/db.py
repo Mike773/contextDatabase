@@ -56,11 +56,42 @@ class DB:
     def fetch_roles_by_direction(self, direction_id: int) -> list[dict]:
         with self.cursor() as cur:
             cur.execute(
-                "SELECT id, name, short_description "
+                "SELECT id, name, short_description, detailed_description "
                 "FROM rag_v2.roles WHERE direction_id = %s ORDER BY id",
                 (direction_id,),
             )
             return [dict(r) for r in cur.fetchall()]
+
+    def insert_extraction(
+        self,
+        *,
+        direction_id: int,
+        document_id: int,
+        entity_type: str,
+        name: str | None = None,
+        description: str | None = None,
+        quote: str | None = None,
+        alternative_names: list[str] | None = None,
+    ) -> int:
+        with self.cursor() as cur:
+            cur.execute(
+                "INSERT INTO rag_v2.extractions "
+                "(direction_id, document_id, entity_type, name, description, "
+                " quote, alternative_names) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                (
+                    direction_id,
+                    document_id,
+                    entity_type,
+                    name,
+                    description,
+                    quote,
+                    alternative_names or [],
+                ),
+            )
+            new_id = cur.fetchone()["id"]
+        self.commit()
+        return new_id
 
     def update_document_analysis_plan(
         self, document_id: int, plan: dict
@@ -174,19 +205,21 @@ class DB:
         detailed_description: str,
         document_id: int,
         short_description_embedding: list[float],
+        role_names: list[str] | None = None,
     ) -> int:
         with self.cursor() as cur:
             cur.execute(
                 "INSERT INTO rag_v2.claims "
                 "(direction_id, scope, short_description, detailed_description, "
-                " document_ids, short_description_embedding) "
-                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                " document_ids, role_names, short_description_embedding) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (
                     direction_id,
                     scope,
                     short_description,
                     detailed_description,
                     [document_id],
+                    role_names or [],
                     short_description_embedding,
                 ),
             )
