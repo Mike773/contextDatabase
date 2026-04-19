@@ -113,3 +113,16 @@ CREATE TABLE IF NOT EXISTS rag_v2.algorithms (
     name_embedding              VECTOR(2560),
     short_description_embedding VECTOR(2560)
 );
+
+-- 10. Извлечённые из документов сущности — буфер перед загрузкой в основные таблицы.
+-- Темповая таблица: без FK на directions/documents, чистится на стороне приложения.
+CREATE TABLE IF NOT EXISTS rag_v2.extractions (
+    id            BIGSERIAL PRIMARY KEY,
+    direction_id  BIGINT NOT NULL,
+    document_id   BIGINT NOT NULL,
+    entity_type   TEXT NOT NULL,
+    name          TEXT,
+    description   TEXT,
+    quote         TEXT,
+    status        TEXT NOT NULL DEFAULT 'pending'
+);
