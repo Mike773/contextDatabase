@@ -57,7 +57,9 @@ CREATE TABLE IF NOT EXISTS rag_v2.terms (
     short_description_embedding VECTOR(2560)
 );
 
--- 5. Роли (detailed_description включает связи между ролями)
+-- 5. Роли (detailed_description включает связи между ролями).
+-- alternative_names хранит варианты именования одной роли — заполняется промоушеном из
+-- соответствующего поля rag_v2.extractions.
 CREATE TABLE IF NOT EXISTS rag_v2.roles (
     id                          BIGSERIAL PRIMARY KEY,
     direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS rag_v2.roles (
     short_description           TEXT,
     detailed_description        TEXT,
     quotes                      JSONB NOT NULL DEFAULT '[]'::jsonb,
+    alternative_names           TEXT[] NOT NULL DEFAULT '{}',
     name_embedding              VECTOR(2560),
     short_description_embedding VECTOR(2560)
 );
