@@ -123,13 +123,16 @@ CREATE TABLE IF NOT EXISTS rag_v2.algorithms (
 
 -- 10. Извлечённые из документов сущности — буфер перед загрузкой в основные таблицы.
 -- Темповая таблица: без FK на directions/documents, чистится на стороне приложения.
+-- alternative_names: используется анализатором ролей для хранения вариантов именования
+-- одной и той же роли, встреченных в документе (другие типы сущностей игнорируют поле).
 CREATE TABLE IF NOT EXISTS rag_v2.extractions (
-    id            BIGSERIAL PRIMARY KEY,
-    direction_id  BIGINT NOT NULL,
-    document_id   BIGINT NOT NULL,
-    entity_type   TEXT NOT NULL,
-    name          TEXT,
-    description   TEXT,
-    quote         TEXT,
-    status        TEXT NOT NULL DEFAULT 'pending'
+    id                 BIGSERIAL PRIMARY KEY,
+    direction_id       BIGINT NOT NULL,
+    document_id        BIGINT NOT NULL,
+    entity_type        TEXT NOT NULL,
+    name               TEXT,
+    description        TEXT,
+    quote              TEXT,
+    alternative_names  TEXT[] NOT NULL DEFAULT '{}',
+    status             TEXT NOT NULL DEFAULT 'pending'
 );
