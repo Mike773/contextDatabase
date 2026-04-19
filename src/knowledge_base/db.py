@@ -203,11 +203,11 @@ class DB:
         with self.cursor() as cur:
             cur.execute(
                 "SELECT id, short_description, detailed_description, "
-                "       1 - (short_description_embedding <=> %s) AS similarity "
+                "       1 - (short_description_embedding <=> %s::vector) AS similarity "
                 "FROM rag_v2.claims "
                 "WHERE direction_id = %s AND scope = %s "
                 "  AND short_description_embedding IS NOT NULL "
-                "ORDER BY short_description_embedding <=> %s "
+                "ORDER BY short_description_embedding <=> %s::vector "
                 "LIMIT %s",
                 (embedding, direction_id, scope, embedding, top_k),
             )
