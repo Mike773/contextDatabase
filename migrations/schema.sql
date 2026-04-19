@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS rag_v2.directions (
     full_name_embedding   VECTOR(2560)
 );
 
--- 2. Сырые документы, привязанные к направлению
+-- 2. Сырые документы, привязанные к направлению.
+-- analysis_plan JSONB: {"criteria": {<key>: bool, ...}, "algorithms_to_run": [<key>, ...], "reasoning": "<...>"}
 CREATE TABLE IF NOT EXISTS rag_v2.documents (
     id                 BIGSERIAL PRIMARY KEY,
     direction_id       BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS rag_v2.documents (
     chunk_separator    TEXT,
     summary            TEXT,
     unclear_items      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    analysis_plan      JSONB NOT NULL DEFAULT '{}'::jsonb,
     title_embedding    VECTOR(2560),
     summary_embedding  VECTOR(2560)
 );
