@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS rag_v2.directions (
     id                    BIGSERIAL PRIMARY KEY,
     short_name            TEXT NOT NULL,
     full_name             TEXT NOT NULL,
+    general_info          TEXT,
     abbreviations         JSONB NOT NULL DEFAULT '{}'::jsonb,
     short_name_embedding  VECTOR(2560),
     full_name_embedding   VECTOR(2560)
