@@ -53,6 +53,15 @@ class DB:
             )
         self.commit()
 
+    def fetch_metrics_by_direction(self, direction_id: int) -> list[dict]:
+        with self.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, short_description "
+                "FROM rag_v2.metrics WHERE direction_id = %s ORDER BY id",
+                (direction_id,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
     def fetch_roles_by_direction(self, direction_id: int) -> list[dict]:
         with self.cursor() as cur:
             cur.execute(
