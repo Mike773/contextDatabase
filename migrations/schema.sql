@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS rag_v2.roles (
 );
 
 -- 6. Утверждения из документов.
--- scope: 'organization' — про организацию в целом; 'direction' — про конкретное направление.
+-- scope: 'organization' — про организацию в целом; 'direction' — про конкретное направление;
+--        'role' — про конкретную роль (тогда role_names содержит канонические имена ролей).
 CREATE TABLE IF NOT EXISTS rag_v2.claims (
     id                          BIGSERIAL PRIMARY KEY,
     direction_id                BIGINT NOT NULL REFERENCES rag_v2.directions(id) ON DELETE CASCADE,
@@ -78,6 +79,7 @@ CREATE TABLE IF NOT EXISTS rag_v2.claims (
     short_description           TEXT NOT NULL,
     detailed_description        TEXT NOT NULL,
     document_ids                BIGINT[] NOT NULL DEFAULT '{}',
+    role_names                  TEXT[] NOT NULL DEFAULT '{}',
     short_description_embedding VECTOR(2560)
 );
 

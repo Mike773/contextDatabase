@@ -205,19 +205,21 @@ class DB:
         detailed_description: str,
         document_id: int,
         short_description_embedding: list[float],
+        role_names: list[str] | None = None,
     ) -> int:
         with self.cursor() as cur:
             cur.execute(
                 "INSERT INTO rag_v2.claims "
                 "(direction_id, scope, short_description, detailed_description, "
-                " document_ids, short_description_embedding) "
-                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                " document_ids, role_names, short_description_embedding) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (
                     direction_id,
                     scope,
                     short_description,
                     detailed_description,
                     [document_id],
+                    role_names or [],
                     short_description_embedding,
                 ),
             )
