@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS rag_v2.terms (
     name                        TEXT NOT NULL,
     short_description           TEXT,
     detailed_description        TEXT,
+    quotes                      JSONB NOT NULL DEFAULT '[]'::jsonb,
     name_embedding              VECTOR(2560),
     short_description_embedding VECTOR(2560)
 );
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS rag_v2.roles (
     name                        TEXT NOT NULL,
     short_description           TEXT,
     detailed_description        TEXT,
+    quotes                      JSONB NOT NULL DEFAULT '[]'::jsonb,
     name_embedding              VECTOR(2560),
     short_description_embedding VECTOR(2560)
 );
