@@ -139,15 +139,6 @@ def _validate_extraction(data: Any) -> None:
         raise ValueError("reasoning must be non-empty string")
 
 
-def _format_description_with_roles(
-    description: str, role_names: list[str]
-) -> str:
-    if role_names:
-        roles_line = "Связанные роли: " + ", ".join(role_names) + "."
-        return f"{roles_line}\n\n{description.strip()}"
-    return description.strip()
-
-
 class MetricsAnalyzer(Analyzer):
     name = "metrics"
 
@@ -175,14 +166,12 @@ class MetricsAnalyzer(Analyzer):
 
         for metric in data["metrics"]:
             role_names = [n.strip() for n in metric.get("role_names", [])]
-            description = _format_description_with_roles(
-                metric["description"], role_names
-            )
             self.kb.db.insert_extraction(
                 direction_id=direction_id,
                 document_id=document_id,
                 entity_type=ENTITY_TYPE,
                 name=metric["name"].strip(),
-                description=description,
+                description=metric["description"].strip(),
                 quote=metric["quote"].strip(),
+                related_role_names=role_names,
             )

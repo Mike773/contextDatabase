@@ -157,21 +157,6 @@ def _validate_extraction(data: Any) -> None:
         raise ValueError("reasoning must be non-empty string")
 
 
-def _format_description_with_links(
-    description: str, role_names: list[str], metric_names: list[str]
-) -> str:
-    prefix_lines: list[str] = []
-    if role_names:
-        prefix_lines.append("Связанные роли: " + ", ".join(role_names) + ".")
-    if metric_names:
-        prefix_lines.append(
-            "Связанные метрики: " + ", ".join(metric_names) + "."
-        )
-    if prefix_lines:
-        return "\n".join(prefix_lines) + "\n\n" + description.strip()
-    return description.strip()
-
-
 class AlgorithmsAnalyzer(Analyzer):
     name = "algorithms"
 
@@ -208,14 +193,13 @@ class AlgorithmsAnalyzer(Analyzer):
         for alg in data["algorithms"]:
             role_names = [n.strip() for n in alg.get("role_names", [])]
             metric_names = [n.strip() for n in alg.get("metric_names", [])]
-            description = _format_description_with_links(
-                alg["description"], role_names, metric_names
-            )
             self.kb.db.insert_extraction(
                 direction_id=direction_id,
                 document_id=document_id,
                 entity_type=ENTITY_TYPE,
                 name=alg["name"].strip(),
-                description=description,
+                description=alg["description"].strip(),
                 quote=alg["quote"].strip(),
+                related_role_names=role_names,
+                related_metric_names=metric_names,
             )

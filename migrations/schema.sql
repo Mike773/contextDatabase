@@ -125,16 +125,19 @@ CREATE TABLE IF NOT EXISTS rag_v2.algorithms (
 
 -- 10. Извлечённые из документов сущности — буфер перед загрузкой в основные таблицы.
 -- Темповая таблица: без FK на directions/documents, чистится на стороне приложения.
--- alternative_names: используется анализатором ролей для хранения вариантов именования
--- одной и той же роли, встреченных в документе (другие типы сущностей игнорируют поле).
+-- alternative_names: варианты именования одной и той же роли (заполняется анализатором ролей).
+-- related_role_names / related_metric_names: канонические имена связанных ролей и метрик,
+-- записанные анализаторами metrics / algorithms; промоушен резолвит их в role_ids / metric_ids.
 CREATE TABLE IF NOT EXISTS rag_v2.extractions (
-    id                 BIGSERIAL PRIMARY KEY,
-    direction_id       BIGINT NOT NULL,
-    document_id        BIGINT NOT NULL,
-    entity_type        TEXT NOT NULL,
-    name               TEXT,
-    description        TEXT,
-    quote              TEXT,
-    alternative_names  TEXT[] NOT NULL DEFAULT '{}',
-    status             TEXT NOT NULL DEFAULT 'pending'
+    id                    BIGSERIAL PRIMARY KEY,
+    direction_id          BIGINT NOT NULL,
+    document_id           BIGINT NOT NULL,
+    entity_type           TEXT NOT NULL,
+    name                  TEXT,
+    description           TEXT,
+    quote                 TEXT,
+    alternative_names     TEXT[] NOT NULL DEFAULT '{}',
+    related_role_names    TEXT[] NOT NULL DEFAULT '{}',
+    related_metric_names  TEXT[] NOT NULL DEFAULT '{}',
+    status                TEXT NOT NULL DEFAULT 'pending'
 );
