@@ -150,9 +150,35 @@ for name in plan["algorithms_to_run"]:
 | `metrics` | `extractions` (entity_type=metric) | Метрики с описанием или контекстом использования |
 | `algorithms` | `extractions` (entity_type=algorithm) | Алгоритмы, процессы, правила интерпретации метрик |
 
-### Промоушен
+### Промоушен extractions → основные таблицы
 
-Записи в `extractions` — это буфер. Дедуп и загрузка в типизированные таблицы (`roles`, `metrics`, `algorithms`) выполняются отдельным процессом, не входящим в этот пакет.
+Записи в `extractions` — это буфер. После прогона анализаторов запусти промоушен, чтобы перенести их в `rag_v2.roles`, `rag_v2.metrics` и `rag_v2.algorithms`:
+
+```python
+stats = kb.promote(direction_id)
+# {
+#   "roles":      {"created": N, "merged": M, "processed": K},
+#   "metrics":    {"created": N, "merged": M, "processed": K, "unresolved_role_names": [...]},
+#   "algorithms": {"created": N, "merged": M, "processed": K,
+#                  "unresolved_role_names": [...], "unresolved_metric_names": [...]}
+# }
+```
+
+CLI:
+
+```bash
+python run.py promote <direction_id>
+```
+
+**Что делает:**
+- `roles` — экстракции `entity_type='role'` переносятся в `rag_v2.roles`. Дедуп по `LOWER(name)`. При совпадении с существующей — добавляется новая цитата в `quotes` и варианты именования сливаются в `alternative_names` (UNIQUE). Пропадающих alt-имён нет.
+- `metrics` — экстракции `entity_type='metric'` сначала проверяются через pgvector (косинус ≥ 0.80, top-3) и LLM-верификацию — тот же подход, что и для claims в анализаторе A3. Если LLM подтвердил совпадение — `document_id` и `role_ids` аппендятся в существующую метрику. Иначе — insert.
+- `algorithms` — то же, что метрики, плюс дополнительно резолвятся `metric_names → metric_ids`.
+- Связанные роли/метрики резолвятся по `name` И по `alternative_names` — если анализатор упомянул роль как «менеджер отдела», а в `rag_v2.roles` она уже есть с каноническим «Менеджер по продажам» и `alternative_names=[«менеджер отдела»]` — связка находится.
+- Нерезолвенные имена не блокируют промоушен сущности: они возвращаются в `stats.unresolved_*` и записи вставляются с тем, что смогли зарезолвить.
+- После успешной обработки экстракции её `status` переходит в `loaded`. Повторный вызов `kb.promote()` — no-op: только pending-экстракции обрабатываются (идемпотентность).
+
+**Порядок обязателен:** roles → metrics → algorithms (метрики зависят от ролей, алгоритмы — и от тех, и от других). `kb.promote(direction_id)` этот порядок обеспечивает сам.
 
 ## CLI
 

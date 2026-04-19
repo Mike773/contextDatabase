@@ -31,11 +31,35 @@ class KnowledgeBase:
         ANALYZERS[analyzer_name](self).run(document_id)
 
     def cli(self, argv: list[str]) -> None:
-        if len(argv) != 2:
-            raise SystemExit(
-                f"usage: <analyzer> <document_id>\nanalyzers: {sorted(ANALYZERS)}"
-            )
-        self.run(argv[0], int(argv[1]))
+        if len(argv) == 2 and argv[0] == "promote":
+            stats = self.promote(int(argv[1]))
+            import json
+            print(json.dumps(stats, ensure_ascii=False, indent=2))
+            return
+        if len(argv) == 2:
+            self.run(argv[0], int(argv[1]))
+            return
+        raise SystemExit(
+            "usage:\n"
+            f"  <analyzer> <document_id>   — analyzers: {sorted(ANALYZERS)}\n"
+            "  promote <direction_id>     — promote staging to main tables"
+        )
+
+    def promote_roles(self, direction_id: int) -> dict:
+        from .promotion import promote_roles
+        return promote_roles(self, direction_id)
+
+    def promote_metrics(self, direction_id: int) -> dict:
+        from .promotion import promote_metrics
+        return promote_metrics(self, direction_id)
+
+    def promote_algorithms(self, direction_id: int) -> dict:
+        from .promotion import promote_algorithms
+        return promote_algorithms(self, direction_id)
+
+    def promote(self, direction_id: int) -> dict:
+        from .promotion import promote_all
+        return promote_all(self, direction_id)
 
     def call_structured(
         self,
