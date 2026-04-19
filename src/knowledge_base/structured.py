@@ -16,10 +16,31 @@ def _extract_json(text: str) -> Any:
         pass
     m = re.search(r"```(?:json)?\s*([\[{].*?[\]}])\s*```", text, re.DOTALL)
     if m:
-        return json.loads(m.group(1))
-    m = re.search(r"([\[{].*[\]}])", text, re.DOTALL)
-    if m:
-        return json.loads(m.group(1))
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+    # Walk the text left-to-right; at each '{' or '[' try raw_decode.
+    # On success, advance past the decoded region so inner structures inside an
+    # already-consumed JSON are not revisited. Keep the LAST successful decode —
+    # models typically emit the real final JSON after reasoning prose that may
+    # contain pseudo-lists like "[foo, bar]" which raw_decode will reject.
+    dec = json.JSONDecoder()
+    last_obj: Any = None
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] in "{[":
+            try:
+                obj, end = dec.raw_decode(text[i:])
+                last_obj = obj
+                i += end
+                continue
+            except json.JSONDecodeError:
+                pass
+        i += 1
+    if last_obj is not None:
+        return last_obj
     raise json.JSONDecodeError("no JSON in LLM output", text, 0)
 
 

@@ -52,3 +52,22 @@ class DB:
                 (summary, summary_embedding, document_id),
             )
         self.commit()
+
+    def fetch_roles_by_direction(self, direction_id: int) -> list[dict]:
+        with self.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, short_description "
+                "FROM rag_v2.roles WHERE direction_id = %s ORDER BY id",
+                (direction_id,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def update_document_analysis_plan(
+        self, document_id: int, plan: dict
+    ) -> None:
+        with self.cursor() as cur:
+            cur.execute(
+                "UPDATE rag_v2.documents SET analysis_plan = %s WHERE id = %s",
+                (psycopg2.extras.Json(plan), document_id),
+            )
+        self.commit()
