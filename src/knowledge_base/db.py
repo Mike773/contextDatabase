@@ -90,13 +90,16 @@ class DB:
         description: str | None = None,
         quote: str | None = None,
         alternative_names: list[str] | None = None,
+        related_role_names: list[str] | None = None,
+        related_metric_names: list[str] | None = None,
     ) -> int:
         with self.cursor() as cur:
             cur.execute(
                 "INSERT INTO rag_v2.extractions "
                 "(direction_id, document_id, entity_type, name, description, "
-                " quote, alternative_names) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                " quote, alternative_names, related_role_names, "
+                " related_metric_names) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (
                     direction_id,
                     document_id,
@@ -105,6 +108,8 @@ class DB:
                     description,
                     quote,
                     alternative_names or [],
+                    related_role_names or [],
+                    related_metric_names or [],
                 ),
             )
             new_id = cur.fetchone()["id"]
