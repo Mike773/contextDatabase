@@ -76,7 +76,7 @@ class SummaryAnalyzer(Analyzer):
         if doc is None:
             raise ValueError(f"document {document_id} not found")
 
-        direction = self.kb.db.fetch_direction(doc["direction_id"])
+        direction = self.kb.db.fetch_direction(doc["direction_id"]) or {}
         context = _format_context(direction) if direction else None
 
         prompt = build_prompt(
@@ -94,5 +94,5 @@ class SummaryAnalyzer(Analyzer):
             summary=data["summary"].strip(),
             key_themes=[t.strip() for t in data["key_themes"]],
         )
-        vector = self.kb.embedding.embed(formatted)
+        vector = self.kb.embed(formatted, direction.get("abbreviations"))
         self.kb.db.update_document_summary(document_id, formatted, vector)

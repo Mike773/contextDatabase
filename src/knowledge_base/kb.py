@@ -1,8 +1,18 @@
+import re
 from typing import Any, Callable
 
 from .analyzers import ANALYZERS
 from .clients import EmbeddingClient, LLMClient
 from .structured import call_structured as _call_structured
+
+
+def _expand_abbreviations(text: str, abbreviations: dict) -> str:
+    if not abbreviations:
+        return text
+    for key in sorted(abbreviations.keys(), key=len, reverse=True):
+        value = abbreviations[key]
+        text = re.sub(rf"\b{re.escape(key)}\b", value, text)
+    return text
 
 
 class KnowledgeBase:
@@ -37,3 +47,8 @@ class KnowledgeBase:
         return _call_structured(
             self.llm, prompt, validate=validate, max_retries=max_retries
         )
+
+    def embed(self, text: str, abbreviations: dict | None = None) -> list[float]:
+        if abbreviations:
+            text = _expand_abbreviations(text, abbreviations)
+        return self.embedding.embed(text)
