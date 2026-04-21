@@ -3,7 +3,9 @@
 Класс KnowledgeExtractor принимает direction_id + роль + сценарий +
 инструкцию + формат ответа, после чего отдаёт пять блоков контекста:
 информация об организации, о направлении, о ситуации (роль × сценарий ×
-инструкция), связанные алгоритмы и связанные метрики.
+инструкция), детальное описание релевантных алгоритмов (с обращением к
+документам-первоисточникам) и список метрик, связанных с этими
+алгоритмами.
 
 Файл сознательно self-contained: ничего не импортируется из соседних
 модулей проекта — только внешние библиотеки. Его можно скопировать в
@@ -62,6 +64,7 @@ class KnowledgeExtractor:
         self._situational_summary: str | None = None
         self._metrics: list[dict] = []
         self._algorithms: list[dict] = []
+        self._algorithms_text: str | None = None
         self._organization_text: str | None = None
         self._direction_text: str | None = None
 
@@ -152,15 +155,6 @@ class KnowledgeExtractor:
                     direction=direction,
                 )
 
-                self._metrics = self._select_metrics(
-                    cur,
-                    direction_id=direction_id,
-                    matched_roles=self._matched_roles,
-                    matched_role_ids=matched_role_ids,
-                    instruction=instruction,
-                    instruction_embedding=instruction_embedding,
-                    direction=direction,
-                )
                 self._algorithms = self._select_algorithms(
                     cur,
                     direction_id=direction_id,
@@ -170,6 +164,46 @@ class KnowledgeExtractor:
                     instruction_embedding=instruction_embedding,
                     direction=direction,
                 )
+
+                algorithm_metric_ids = sorted(
+                    {
+                        mid
+                        for a in self._algorithms
+                        for mid in (a.get("metric_ids") or [])
+                    }
+                )
+                self._metrics = (
+                    self._fetch_metrics_by_ids(
+                        cur, direction_id, algorithm_metric_ids
+                    )
+                    if algorithm_metric_ids
+                    else []
+                )
+
+                if self._algorithms:
+                    algorithm_document_ids = sorted(
+                        {
+                            did
+                            for a in self._algorithms
+                            for did in (a.get("document_ids") or [])
+                        }
+                    )
+                    source_documents = (
+                        self._fetch_documents_by_ids(
+                            cur, direction_id, algorithm_document_ids
+                        )
+                        if algorithm_document_ids
+                        else []
+                    )
+                    self._algorithms_text = self._describe_algorithms(
+                        algorithms=self._algorithms,
+                        algorithm_metrics=self._metrics,
+                        source_documents=source_documents,
+                        instruction=instruction,
+                        direction=direction,
+                    )
+                else:
+                    self._algorithms_text = None
 
                 self._organization_text = self._build_organization_text(
                     org_terms=self._org_terms,
@@ -200,9 +234,9 @@ class KnowledgeExtractor:
         self._require_ready()
         return self._situational_summary or self.NOT_FOUND
 
-    def related_algorithms(self) -> list[dict] | str:
+    def related_algorithms(self) -> str:
         self._require_ready()
-        return self._algorithms if self._algorithms else self.NOT_FOUND
+        return self._algorithms_text or self.NOT_FOUND
 
     def related_metrics(self) -> list[dict] | str:
         self._require_ready()
@@ -944,89 +978,8 @@ class KnowledgeExtractor:
         )
 
     # ==================================================================
-    # Metrics / algorithms selectors
+    # Algorithms selector + metrics / documents lookup
     # ==================================================================
-
-    def _select_metrics(
-        self,
-        cur,
-        *,
-        direction_id: int,
-        matched_roles: list[dict],
-        matched_role_ids: list[int],
-        instruction: str,
-        instruction_embedding: list[float],
-        direction: dict,
-    ) -> list[dict]:
-        candidates = self._semantic_fetch(
-            cur,
-            table="rag_v2.metrics",
-            direction_id=direction_id,
-            embedding=instruction_embedding,
-            role_ids=matched_role_ids,
-            threshold=self.METRICS_SIM_THRESHOLD,
-            extra_columns="connections_description, role_ids",
-        )
-        if not candidates:
-            return []
-
-        id_to_cand = {c["id"]: c for c in candidates}
-        candidate_lines = "\n".join(
-            f"id={c['id']} | name={c.get('name', '')} | "
-            f"short_description={self._trim(c.get('short_description'))}"
-            for c in candidates
-        )
-        context_parts = [self._format_direction_header(direction)]
-        if matched_roles:
-            context_parts.append(
-                "# Выбранные роли\n"
-                + "\n".join(f"- {r['name']}" for r in matched_roles)
-            )
-        context_parts.append("# Кандидаты-метрики\n" + candidate_lines)
-
-        task = (
-            "Твоя задача — ВЫБРАТЬ из приведённого списка метрик те, которые\n"
-            "относятся к задаче аналитика. Ты НЕ отвечаешь на задачу, НЕ\n"
-            "предлагаешь новых метрик, НЕ рассчитываешь ничего. Ты только\n"
-            "отбираешь метрики, УЖЕ существующие в списке «# Контекст».\n\n"
-            "Метрика подходит, если:\n"
-            "- она измеряет работу выбранной роли, ИЛИ\n"
-            "- она описывает показатель процесса, упомянутого в задаче, ИЛИ\n"
-            "- её имя/описание прямо упоминает понятия из формулировки задачи.\n\n"
-            "Отсекай метрики из смежных, но не запрошенных областей. Если ни\n"
-            "одна не подходит — пустой список.\n\n"
-            "НЕ добавляй id, отсутствующие в списке. НЕ выдумывай метрики.\n"
-            "Аббревиатуры расшифровывай ТОЛЬКО через список из «# Контекст».\n\n"
-            "Финальный ответ СТРОГО формата:\n"
-            '{"metric_ids": [<int>, ...], "reasoning": "<1–2 предложения>"}\n'
-            "Никаких комментариев после JSON."
-        )
-
-        steps = [
-            "Перечитай задачу аналитика. В 1–2 предложениях выдели: про какой процесс и какой показатель.",
-            "Разверни аббревиатуры из «# Контекст» (для себя, в рассуждениях).",
-            "Пройди по КАЖДОЙ метрике-кандидату отдельно. Дай одно предложение: «подходит, потому что ...» или «не подходит, потому что ...».",
-            "Собери id подходящих. Если ни одной — пустой список.",
-            "Напиши reasoning — 1–2 предложения про принцип отбора.",
-            "Выведи финальный JSON строго по формату из «# Описания задачи».",
-        ]
-
-        prompt = self._build_prompt(
-            task=task,
-            title="Выборка метрик из базы знаний",
-            text=f"Задача аналитика:\n{instruction}",
-            steps=steps,
-            context="\n\n".join(context_parts),
-        )
-
-        data = self._call_structured(
-            prompt, validate=self._ids_validator("metric_ids", id_to_cand)
-        )
-        return [
-            id_to_cand[i]
-            for i in dict.fromkeys(data["metric_ids"])
-            if i in id_to_cand
-        ]
 
     def _select_algorithms(
         self,
@@ -1110,6 +1063,140 @@ class KnowledgeExtractor:
             for i in dict.fromkeys(data["algorithm_ids"])
             if i in id_to_cand
         ]
+
+    @staticmethod
+    def _fetch_metrics_by_ids(
+        cur, direction_id: int, metric_ids: list[int]
+    ) -> list[dict]:
+        if not metric_ids:
+            return []
+        cur.execute(
+            "SELECT id, name, short_description, detailed_description, "
+            "       connections_description, role_ids "
+            "FROM rag_v2.metrics "
+            "WHERE direction_id = %s AND id = ANY(%s::bigint[]) "
+            "ORDER BY id",
+            (direction_id, metric_ids),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    @staticmethod
+    def _fetch_documents_by_ids(
+        cur, direction_id: int, document_ids: list[int]
+    ) -> list[dict]:
+        if not document_ids:
+            return []
+        cur.execute(
+            "SELECT id, title, text "
+            "FROM rag_v2.documents "
+            "WHERE direction_id = %s AND id = ANY(%s::bigint[]) "
+            "ORDER BY id",
+            (direction_id, document_ids),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def _describe_algorithms(
+        self,
+        *,
+        algorithms: list[dict],
+        algorithm_metrics: list[dict],
+        source_documents: list[dict],
+        instruction: str,
+        direction: dict,
+    ) -> str:
+        if not algorithms:
+            return self.NOT_FOUND
+
+        metrics_by_id = {m["id"]: m for m in algorithm_metrics}
+
+        algorithm_blocks: list[str] = []
+        for a in algorithms:
+            metric_parts = []
+            for mid in a.get("metric_ids") or []:
+                m = metrics_by_id.get(mid)
+                if not m:
+                    continue
+                metric_parts.append(
+                    f"  - {m.get('name', '')}: "
+                    f"{m.get('short_description', '') or ''}\n"
+                    f"    Подробно: {m.get('detailed_description', '') or ''}\n"
+                    f"    Связи: {m.get('connections_description', '') or ''}"
+                )
+            metric_block = (
+                "\n".join(metric_parts)
+                if metric_parts
+                else "  — связанные метрики не найдены —"
+            )
+            algorithm_blocks.append(
+                f"Алгоритм id={a['id']} «{a.get('name', '')}»\n"
+                f"Краткое описание: {a.get('short_description', '') or ''}\n"
+                f"Полное описание из базы знаний:\n"
+                f"{a.get('detailed_description', '') or ''}\n"
+                f"Связанные метрики:\n{metric_block}\n"
+                f"document_ids: {list(a.get('document_ids') or [])}"
+            )
+        algorithms_context = "\n\n".join(algorithm_blocks)
+
+        if source_documents:
+            doc_parts = []
+            for d in source_documents:
+                doc_parts.append(
+                    f"Документ id={d['id']} «{d.get('title', '')}»:\n"
+                    f"{d.get('text', '') or ''}"
+                )
+            documents_context = "\n\n".join(doc_parts)
+        else:
+            documents_context = (
+                "— документы-первоисточники к этим алгоритмам в базе "
+                "отсутствуют или не связаны —"
+            )
+
+        context = (
+            f"{self._format_direction_header(direction)}\n\n"
+            f"# Отобранные алгоритмы\n{algorithms_context}\n\n"
+            f"# Документы-первоисточники\n{documents_context}"
+        )
+
+        task = (
+            "Твоя задача — по каждому алгоритму из «# Отобранные алгоритмы»\n"
+            "собрать МАКСИМАЛЬНО ДЕТАЛЬНОЕ текстовое описание, которое\n"
+            "аналитик будет использовать напрямую для применения алгоритма и\n"
+            "интерпретации его метрик. Это НЕ саммари и НЕ краткий пересказ.\n\n"
+            "Правила:\n"
+            "- Сохрани ВСЕ шаги, формулы, пороги, условия, исключения,\n"
+            "  обозначенные как в базе знаний, так и в документах-\n"
+            "  первоисточниках. Если документ-первоисточник добавляет\n"
+            "  уточнения к шагам — включи их в описание.\n"
+            "- НЕ сокращай числа, сроки, ссылки на системы и роли.\n"
+            "- Обязательно перечисли связанные метрики с их целевыми\n"
+            "  значениями и правилами интерпретации.\n"
+            "- Если для какого-то алгоритма документов-первоисточников нет —\n"
+            "  работай только с его полным описанием из базы; не придумывай\n"
+            "  деталей, которых нет в «# Контекст».\n"
+            "- Аббревиатуры разворачивай ТОЛЬКО через список из «# Контекст».\n"
+            "- НЕ отвечай на саму инструкцию — готовь справочный материал.\n\n"
+            "Финальный ответ: после последнего шага выведи отдельной строкой\n"
+            "«ИТОГ:», а следом — детальное описание каждого алгоритма одним\n"
+            "текстом. Для каждого начинай с заголовка «Алгоритм: <имя>»."
+        )
+
+        steps = [
+            "Прочитай каждый алгоритм из «# Отобранные алгоритмы» и отметь для себя шаги, метрики, источники.",
+            "Прочитай «# Документы-первоисточники» и сопоставь их содержание с шагами алгоритмов (по имени, понятиям, ролям).",
+            "Для КАЖДОГО алгоритма отдельно собери полное описание: введение (что делает и зачем), последовательность шагов, формулы/условия/пороги, связанные метрики (с деталями и целевыми значениями), ссылки на роли и системы.",
+            "Убедись, что не опустил ни один шаг/формулу/число/исключение ни из базы, ни из документа.",
+            "Разверни аббревиатуры через список из «# Контекст».",
+            "После последнего шага выведи «ИТОГ:» на новой строке и сразу за ним — детальные описания всех алгоритмов подряд.",
+        ]
+
+        prompt = self._build_prompt(
+            task=task,
+            title="Детальное описание отобранных алгоритмов для аналитика",
+            text=f"Инструкция (для справки, не для ответа на неё):\n{instruction}",
+            steps=steps,
+            context=context,
+        )
+        return self._call_free_text(prompt)
 
     # ==================================================================
     # Candidate fetch helpers
