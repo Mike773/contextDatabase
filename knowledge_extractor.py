@@ -8,10 +8,13 @@
 с этими алгоритмами.
 
 Файл сознательно self-contained: ничего не импортируется из соседних
-модулей проекта — только внешние библиотеки (psycopg v3, pgvector).
-Его можно скопировать в любой сторонний скрипт одним файлом. Логика
-отбора (embedding + LLM verification с пошаговым reasoning) и ключевые
-утилиты продублированы из extractor.py по этой причине.
+модулей проекта — только одна внешняя библиотека (psycopg v3). Тип
+VECTOR используется через явное SQL-приведение `%s::vector`, поэтому
+Python-адаптер `pgvector` не нужен — эмбеддинги передаются строковым
+литералом `[x,y,z]` через `_vector_literal`. Файл можно скопировать в
+любой сторонний скрипт одним файлом. Логика отбора (embedding + LLM
+verification с пошаговым reasoning) и ключевые утилиты продублированы
+из extractor.py по этой причине.
 """
 
 import json
@@ -20,7 +23,15 @@ from typing import Any, Callable
 
 import psycopg
 from psycopg.rows import dict_row
-from pgvector.psycopg import register_vector
+
+
+def _vector_literal(embedding: list[float]) -> str:
+    """Convert list[float] to a pgvector text literal '[x,y,z]'.
+
+    Works with any PostgreSQL client as long as the SQL uses explicit
+    `%s::vector` casts — lets us avoid the pgvector Python adapter.
+    """
+    return "[" + ",".join(repr(float(x)) for x in embedding) + "]"
 
 
 class KnowledgeExtractor:
@@ -89,7 +100,6 @@ class KnowledgeExtractor:
 
         conn = psycopg.connect(self._dsn)
         conn.autocommit = True
-        register_vector(conn)
         try:
             with conn.cursor(row_factory=dict_row) as cur:
                 direction = self._fetch_direction(cur, direction_id)
@@ -1284,6 +1294,7 @@ class KnowledgeExtractor:
         embedding: list[float],
         threshold: float,
     ) -> list[dict]:
+        vec = _vector_literal(embedding)
         cur.execute(
             "SELECT id, scope, short_description, detailed_description, "
             "       role_names, "
@@ -1293,7 +1304,7 @@ class KnowledgeExtractor:
             "  AND short_description_embedding IS NOT NULL "
             "ORDER BY short_description_embedding <=> %s::vector "
             "LIMIT %s",
-            (embedding, direction_id, embedding, self.TOP_K),
+            (vec, direction_id, vec, self.TOP_K),
         )
         candidates: list[dict] = []
         for r in cur.fetchall():
@@ -1310,6 +1321,7 @@ class KnowledgeExtractor:
         embedding: list[float],
         threshold: float,
     ) -> list[dict]:
+        vec = _vector_literal(embedding)
         cur.execute(
             "SELECT id, scope, name, short_description, detailed_description, "
             "       1 - (COALESCE(short_description_embedding, name_embedding) <=> %s::vector) AS similarity "
@@ -1319,7 +1331,7 @@ class KnowledgeExtractor:
             "       OR name_embedding IS NOT NULL) "
             "ORDER BY COALESCE(short_description_embedding, name_embedding) <=> %s::vector "
             "LIMIT %s",
-            (embedding, direction_id, embedding, self.TOP_K),
+            (vec, direction_id, vec, self.TOP_K),
         )
         candidates: list[dict] = []
         for r in cur.fetchall():
@@ -1340,6 +1352,7 @@ class KnowledgeExtractor:
         threshold: float,
         extra_columns: str = "",
     ) -> list[dict]:
+        vec = _vector_literal(embedding)
         columns = "id, name, short_description, detailed_description"
         if extra_columns:
             columns += ", " + extra_columns
@@ -1358,10 +1371,10 @@ class KnowledgeExtractor:
         def run(clause: str, extra_params: tuple) -> list[dict]:
             sql = base_sql.replace("{role_clause}", clause)
             params = (
-                embedding,
+                vec,
                 direction_id,
                 *extra_params,
-                embedding,
+                vec,
                 self.TOP_K,
             )
             cur.execute(sql, params)
