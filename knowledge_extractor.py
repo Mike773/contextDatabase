@@ -18,9 +18,38 @@ import json
 import re
 from typing import Any, Callable
 
-import psycopg2
-import psycopg2.extras
-from pgvector.psycopg2 import register_vector
+try:
+    import psycopg2 as _psycopg
+    import psycopg2.extras as _psycopg_extras
+    from pgvector.psycopg2 import register_vector as _register_vector
+
+    _PSYCOPG_VERSION = 2
+except ImportError:  # pragma: no cover
+    try:
+        import psycopg as _psycopg
+        from psycopg.rows import dict_row as _psycopg_dict_row
+        from pgvector.psycopg import register_vector as _register_vector
+
+        _PSYCOPG_VERSION = 3
+    except ImportError as _e:  # pragma: no cover
+        raise ImportError(
+            "knowledge_extractor requires either psycopg2 "
+            "(with pgvector.psycopg2) or psycopg v3 "
+            "(with pgvector.psycopg)."
+        ) from _e
+
+
+def _pg_connect(dsn: str):
+    conn = _psycopg.connect(dsn)
+    conn.autocommit = True
+    _register_vector(conn)
+    return conn
+
+
+def _pg_dict_cursor(conn):
+    if _PSYCOPG_VERSION == 2:
+        return conn.cursor(cursor_factory=_psycopg_extras.RealDictCursor)
+    return conn.cursor(row_factory=_psycopg_dict_row)
 
 
 class KnowledgeExtractor:
@@ -87,13 +116,9 @@ class KnowledgeExtractor:
         self._instruction = instruction
         self._response_format = response_format
 
-        conn = psycopg2.connect(self._dsn)
-        conn.autocommit = True
-        register_vector(conn)
+        conn = _pg_connect(self._dsn)
         try:
-            with conn.cursor(
-                cursor_factory=psycopg2.extras.RealDictCursor
-            ) as cur:
+            with _pg_dict_cursor(conn) as cur:
                 direction = self._fetch_direction(cur, direction_id)
                 if direction is None:
                     raise ValueError(f"direction {direction_id} not found")
