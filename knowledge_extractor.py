@@ -4,8 +4,8 @@
 инструкцию + формат ответа, после чего отдаёт пять блоков контекста:
 информация об организации, о направлении, о ситуации (роль × сценарий ×
 инструкция), детальное описание релевантных алгоритмов (с обращением к
-документам-первоисточникам) и список метрик, связанных с этими
-алгоритмами.
+документам-первоисточникам) и текстовый список имён метрик, связанных
+с этими алгоритмами.
 
 Файл сознательно self-contained: ничего не импортируется из соседних
 модулей проекта — только внешние библиотеки. Его можно скопировать в
@@ -238,9 +238,15 @@ class KnowledgeExtractor:
         self._require_ready()
         return self._algorithms_text or self.NOT_FOUND
 
-    def related_metrics(self) -> list[dict] | str:
+    def related_metrics(self) -> str:
         self._require_ready()
-        return self._metrics if self._metrics else self.NOT_FOUND
+        if not self._metrics:
+            return self.NOT_FOUND
+        return "\n".join(
+            f"- {m.get('name', '')}"
+            for m in self._metrics
+            if m.get("name")
+        ) or self.NOT_FOUND
 
     def _require_ready(self) -> None:
         if not self._ready:
