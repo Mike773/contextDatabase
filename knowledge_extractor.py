@@ -8,48 +8,19 @@
 с этими алгоритмами.
 
 Файл сознательно self-contained: ничего не импортируется из соседних
-модулей проекта — только внешние библиотеки. Его можно скопировать в
-любой сторонний скрипт одним файлом. Логика отбора (embedding + LLM
-verification с пошаговым reasoning) и ключевые утилиты продублированы
-из extractor.py по этой причине.
+модулей проекта — только внешние библиотеки (psycopg v3, pgvector).
+Его можно скопировать в любой сторонний скрипт одним файлом. Логика
+отбора (embedding + LLM verification с пошаговым reasoning) и ключевые
+утилиты продублированы из extractor.py по этой причине.
 """
 
 import json
 import re
 from typing import Any, Callable
 
-try:
-    import psycopg2 as _psycopg
-    import psycopg2.extras as _psycopg_extras
-    from pgvector.psycopg2 import register_vector as _register_vector
-
-    _PSYCOPG_VERSION = 2
-except ImportError:  # pragma: no cover
-    try:
-        import psycopg as _psycopg
-        from psycopg.rows import dict_row as _psycopg_dict_row
-        from pgvector.psycopg import register_vector as _register_vector
-
-        _PSYCOPG_VERSION = 3
-    except ImportError as _e:  # pragma: no cover
-        raise ImportError(
-            "knowledge_extractor requires either psycopg2 "
-            "(with pgvector.psycopg2) or psycopg v3 "
-            "(with pgvector.psycopg)."
-        ) from _e
-
-
-def _pg_connect(dsn: str):
-    conn = _psycopg.connect(dsn)
-    conn.autocommit = True
-    _register_vector(conn)
-    return conn
-
-
-def _pg_dict_cursor(conn):
-    if _PSYCOPG_VERSION == 2:
-        return conn.cursor(cursor_factory=_psycopg_extras.RealDictCursor)
-    return conn.cursor(row_factory=_psycopg_dict_row)
+import psycopg
+from psycopg.rows import dict_row
+from pgvector.psycopg import register_vector
 
 
 class KnowledgeExtractor:
@@ -116,9 +87,11 @@ class KnowledgeExtractor:
         self._instruction = instruction
         self._response_format = response_format
 
-        conn = _pg_connect(self._dsn)
+        conn = psycopg.connect(self._dsn)
+        conn.autocommit = True
+        register_vector(conn)
         try:
-            with _pg_dict_cursor(conn) as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 direction = self._fetch_direction(cur, direction_id)
                 if direction is None:
                     raise ValueError(f"direction {direction_id} not found")
